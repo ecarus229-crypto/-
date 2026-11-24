@@ -28,7 +28,8 @@ class WindowsToolsTests(unittest.TestCase):
             (sys32 / 'notepad.exe').write_bytes(b'mock executable')
             p = windows_tools.executable_for('notepad', windows_dir=root, platform='win32')
             self.assertEqual(p.name, 'notepad.exe')
-            self.assertEqual(p.parent, sys32)
+            # Windows can return 8.3 (RUNNER~1) and expanded path aliases.
+            self.assertTrue(p.parent.samefile(sys32))
 
     def test_invalid_windows_dir_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -46,7 +47,7 @@ class WindowsToolsTests(unittest.TestCase):
         with patch.object(windows_tools, 'executable_for', return_value=Path('C:/Windows/System32/calc.exe')):
             with patch.object(windows_tools.subprocess, 'Popen') as popen:
                 self.assertEqual(windows_tools.launch('calculator', approved=True), 'Калькулятор')
-                popen.assert_called_once_with(['C:/Windows/System32/calc.exe'], shell=False, close_fds=True)
+                popen.assert_called_once_with([str(Path('C:/Windows/System32/calc.exe'))], shell=False, close_fds=True)
 
 
 if __name__ == '__main__':

@@ -13,7 +13,8 @@ class WorkspaceTests(unittest.TestCase):
         self.other = Path(self.temp.name) / 'secret.txt'
         self.other.write_text('SECRET', encoding='utf-8')
         self.file = self.root / 'hello.txt'
-        self.file.write_text('before\n', encoding='utf-8')
+        # Stable fixture: Path.write_text() expands LF to CRLF on Windows.
+        self.file.write_bytes(b'before\n')
 
     def test_stay_inside_root(self):
         for location in ('../secret.txt', str(self.other)):
@@ -57,7 +58,7 @@ class WorkspaceTests(unittest.TestCase):
         self.assertIn('before', prompt)
 
     def test_list(self):
-        self.assertIn(('hello.txt', 7), workspace.list_files(self.root))
+        self.assertIn(('hello.txt', self.file.stat().st_size), workspace.list_files(self.root))
 
     def test_local_endpoint(self):
         self.assertTrue(diagnostics.local_endpoint('http://127.0.0.1:8080/v1'))

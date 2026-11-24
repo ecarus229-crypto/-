@@ -1,4 +1,5 @@
 import json
+from contextlib import closing
 import sqlite3
 import tempfile
 import unittest
@@ -14,9 +15,10 @@ class BackupTests(unittest.TestCase):
         self.home = Path(self.tmp.name) / 'profile'
         self.home.mkdir()
         self.out = Path(self.tmp.name) / 'archive.zip'
-        with sqlite3.connect(self.home / 'memory.db') as db:
-            db.execute('CREATE TABLE notes (text TEXT)')
-            db.execute('INSERT INTO notes VALUES (?)', ('Приватная заметка',))
+        with closing(sqlite3.connect(self.home / 'memory.db')) as db:
+            with db:
+                db.execute('CREATE TABLE notes (text TEXT)')
+                db.execute('INSERT INTO notes VALUES (?)', ('Приватная заметка',))
         (self.home / 'settings.json').write_text(json.dumps({
             'mode': 'local', 'api_key': 'DO_NOT_ARCHIVE',
             'other_secret': 'DO_NOT_ARCHIVE', 'local_model':'qwen'}), encoding='utf-8')
@@ -62,6 +64,9 @@ class BackupTests(unittest.TestCase):
         db.unlink()
         target=Path(self.tmp.name)/'other.db'
         target.write_bytes(b'no')
-        db.symlink_to(target)
+        try:
+            db.symlink_to(target)
+        except (OSError, NotImplementedError):
+            self.skipTest('Создание символьных ссылок ограничено в Windows')
         with self.assertRaises(ValueError):
             backup.export_backup(self.out, data_dir=self.home)
