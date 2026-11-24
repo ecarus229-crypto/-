@@ -1,0 +1,54 @@
+name: Build Windows EXE and Installer
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['assistant_app/**', 'tests/**', 'installer/**', 'requirements-build.txt', '.github/workflows/build-windows.yml']
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install build requirements
+        run: python -m pip install -r requirements-build.txt
+      - name: Test
+        run: python -m unittest discover -s tests -v
+      - name: Build portable EXE
+        run: pyinstaller --noconfirm --clean --onefile --windowed --name PersonalAI --paths . assistant_app/main.py
+      - name: Smoke test portable EXE starts
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath "$PWD\dist\PersonalAI.exe" -PassThru
+          try {
+            Start-Sleep -Seconds 5
+            $p.Refresh()
+            if ($p.HasExited) { throw "PersonalAI.exe terminated unexpectedly (code $($p.ExitCode))" }
+          } finally {
+            if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          }
+      - name: Build installation directory
+        run: pyinstaller --noconfirm --clean --onedir --windowed --name PersonalAI --paths . --distpath installer-dist assistant_app/main.py
+      - name: Install Inno Setup
+        run: choco install innosetup --yes --no-progress
+      - name: Create Windows installer
+        shell: pwsh
+        run: |
+          $iscc = @('C:\Program Files (x86)\Inno Setup 6\ISCC.exe', 'C:\Program Files\Inno Setup 6\ISCC.exe') | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) { throw 'ISCC.exe not found' }
+          & $iscc installer/PersonalAI.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PersonalAI-v4.2.0-Windows-portable
+          path: dist/PersonalAI.exe
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PersonalAI-v4.2.0-Windows-Setup
+          path: output/PersonalAI-Setup-4.2.0.exe
+          if-no-files-found: error
